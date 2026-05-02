@@ -64,6 +64,23 @@ services:
     entrypoint: ["/bin/sh", "/init-connectors.sh"]
     restart: "no"
 
+  ingestion:
+    build:
+      context: ./ingestion
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ANALYTICS_HOST=analytics-db
+      - ANALYTICS_PORT=5432
+      - ANALYTICS_DB=analytics_db
+      - ANALYTICS_USER=analytics_user
+      - ANALYTICS_PASSWORD=analytics_1234
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+
   analytics-db:
     image: postgres:15
     environment:
