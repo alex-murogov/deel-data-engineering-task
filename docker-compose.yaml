@@ -64,6 +64,22 @@ services:
     entrypoint: ["/bin/sh", "/init-connectors.sh"]
     restart: "no"
 
+  api:
+    build:
+      context: ./api
+    environment:
+      - ANALYTICS_HOST=analytics-db
+      - ANALYTICS_PORT=5432
+      - ANALYTICS_DB=analytics_db
+      - ANALYTICS_USER=analytics_user
+      - ANALYTICS_PASSWORD=analytics_1234
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
   ingestion:
     build:
       context: ./ingestion
