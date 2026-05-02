@@ -64,6 +64,7 @@ docker compose up -d --force-recreate <service>
 | `analytics-db` | `postgres:15` | `5433` | Analytics data warehouse (`analytics_db`). Initialized with the star schema DDL. |
 | `ingestion` | `./ingestion` | — | Python Kafka consumer that transforms CDC events and loads the dimensional model |
 | `api` | `./api` | `8000` | FastAPI analytics layer querying `analytics-db` |
+| `metabase` | `metabase/metabase:v0.51.4` | `3000` | BI dashboard — connect to `analytics-db` on first run |
 
 ### Source Database Credentials
 
@@ -230,6 +231,34 @@ Top N customers ranked by number of open orders.
   }
 ]
 ```
+
+---
+
+## Metabase Dashboards
+
+Open `http://localhost:3000` after `docker compose up`. On first run, complete the setup wizard and add a database connection:
+
+| Field | Value |
+|---|---|
+| Database type | PostgreSQL |
+| Host | `analytics-db` |
+| Port | `5432` |
+| Database | `analytics_db` |
+| Username | `analytics_user` |
+| Password | `analytics_1234` |
+
+### Suggested Reports
+
+| Report | Chart type | Key tables |
+|---|---|---|
+| **Open orders by delivery date** | Bar chart | `fact_orders` + `dim_date`, filter `is_open = TRUE` |
+| **Order status funnel** | Pie / funnel | `fact_orders` + `dim_order_status`, all statuses |
+| **Top products by pending quantity** | Horizontal bar | `fact_order_items` + `dim_product`, open orders |
+| **Top customers by open order count** | Ranked table | `fact_orders` + `dim_customer` |
+| **Daily order intake vs. completed** | Dual-line trend | `fact_orders` by `order_date_sk`, split by `is_open` |
+| **Backlog aging** (orders open > N days) | Table with row coloring | Days between `order_date_sk` and today, open orders |
+
+Metabase configuration is persisted in the `metabase-data` Docker volume so dashboards survive container restarts.
 
 ---
 

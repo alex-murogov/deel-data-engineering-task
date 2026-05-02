@@ -121,6 +121,19 @@ services:
       timeout: 5s
       retries: 10
 
+  metabase:
+    image: metabase/metabase:v0.51.4
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+    volumes:
+      - metabase-data:/metabase-data
+    ports:
+      - "3000:3000"
+
 volumes:
   pg-data:
   analytics-pg-data:
+  metabase-data:
