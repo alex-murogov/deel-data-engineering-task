@@ -133,7 +133,40 @@ services:
     ports:
       - "3000:3000"
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    depends_on:
+      - transactions-db
+      - analytics-db
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@acme.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    profiles:
+      - sql-tools
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+      - kafka-connect
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: kafka-connect:8083
+    ports:
+      - "8080:8080"
+    profiles:
+      - monitoring
+
 volumes:
   pg-data:
   analytics-pg-data:
   metabase-data:
+  pgadmin-data:

@@ -65,6 +65,8 @@ docker compose up -d --force-recreate <service>
 | `ingestion` | `./ingestion` | — | Python Kafka consumer that transforms CDC events and loads the dimensional model |
 | `api` | `./api` | `8000` | FastAPI analytics layer querying `analytics-db` |
 | `metabase` | `metabase/metabase:v0.51.4` | `3000` | BI dashboard — connect to `analytics-db` on first run |
+| `pgadmin` | `dpage/pgadmin4:latest` | `5050` | Web-based PostgreSQL administration interface (run with `--profile sql-tools`) |
+| `kafka-ui` | `provectuslabs/kafka-ui:latest` | `8080` | Kafka topic browser and Debezium connector monitor (run with `--profile monitoring`) |
 
 ### Source Database Credentials
 
@@ -88,6 +90,45 @@ docker compose up -d --force-recreate <service>
 
 ---
 
+## Database Query Tools
+
+### Web-based SQL Client (pgAdmin)
+
+For a browser-based PostgreSQL administration interface:
+
+```bash
+# Start pgAdmin
+docker compose --profile sql-tools up pgadmin
+```
+
+Then open http://localhost:5050 in your browser.
+
+**Login credentials:**
+- Email: `admin@acme.com`
+- Password: `admin123`
+
+**Adding database connections in pgAdmin:**
+1. Right-click "Servers" → "Create" → "Server"
+2. Enter connection details:
+
+**Source Database:**
+- Name: `Source DB`
+- Host: `transactions-db`
+- Port: `5432`
+- Username: `finance_db_user`
+- Password: `1234`
+- Database: `finance_db`
+
+**Analytics Database:**
+- Name: `Analytics DB`
+- Host: `analytics-db`
+- Port: `5432`
+- Username: `analytics_user`
+- Password: `analytics_1234`
+- Database: `analytics_db`
+
+---
+
 ## Kafka Topics
 
 | Topic | Source Table |
@@ -96,6 +137,35 @@ docker compose up -d --force-recreate <service>
 | `finance_db.operations.products` | `operations.products` |
 | `finance_db.operations.orders` | `operations.orders` |
 | `finance_db.operations.order_items` | `operations.order_items` |
+
+---
+
+## Monitoring Kafka & Debezium
+
+To watch CDC events flowing through Kafka and Debezium:
+
+### Web-based Kafka UI
+```bash
+docker-compose --profile monitoring up kafka-ui
+```
+Open http://localhost:8080 to browse topics, connectors, and consumer groups visually.
+
+### Check Debezium Connector Status
+```bash
+# Is the connector running?
+curl http://localhost:8083/connectors/finance-db-connector/status
+```
+
+### View Topic Messages
+```bash
+# Monitor orders topic live
+docker exec -it deel-data-engineering-task-kafka-1 kafka-console-consumer \
+  --bootstrap-server localhost:29092 \
+  --topic finance_db.public.orders \
+  --from-beginning
+```
+
+See [KAFKA_DEBEZIUM_MONITORING.md](KAFKA_DEBEZIUM_MONITORING.md) for comprehensive monitoring commands and debugging tips.
 
 ---
 
