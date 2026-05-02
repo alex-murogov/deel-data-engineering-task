@@ -12,6 +12,11 @@ services:
     ports:
       - "5432:5432"
     command: ["postgres", "-c", "wal_level=logical", "-c", "hot_standby=on"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance_db_user -d finance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -40,8 +45,10 @@ services:
   kafka-connect:
     image: debezium/connect:2.4
     depends_on:
-      - kafka
-      - transactions-db
+      kafka:
+        condition: service_started
+      transactions-db:
+        condition: service_healthy
     environment:
       BOOTSTRAP_SERVERS: kafka:29092
       GROUP_ID: 1
