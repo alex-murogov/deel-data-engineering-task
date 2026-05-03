@@ -190,6 +190,21 @@ services:
     profiles:
       - monitoring
 
+  tests:
+    build:
+      context: ./tests
+    environment:
+      - ANALYTICS_HOST=analytics-db
+      - ANALYTICS_PORT=5432
+      - ANALYTICS_DB=analytics_db
+      - ANALYTICS_USER=analytics_user
+      - ANALYTICS_PASSWORD=analytics_1234
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+    profiles:
+      - tests
+
 volumes:
   pg-data:
   analytics-pg-data:
