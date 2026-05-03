@@ -133,6 +133,31 @@ services:
     ports:
       - "3000:3000"
 
+  sql-client:
+    image: postgres:15-alpine
+    depends_on:
+      - transactions-db
+      - analytics-db
+    environment:
+      - PGPASSWORD=1234
+    volumes:
+      - ./db-scripts:/db-scripts
+      - ./sql-queries:/sql-queries
+    command: >
+      sh -c "
+        echo 'SQL Client Container Ready!';
+        echo 'Connect to source DB: psql -h transactions-db -U finance_db_user -d finance_db';
+        echo 'Connect to analytics DB: psql -h analytics-db -U analytics_user -d analytics_db';
+        echo '';
+        echo 'Example commands:';
+        echo '  docker exec -it <container_name> psql -h transactions-db -U finance_db_user -d finance_db';
+        echo '  docker exec -it <container_name> psql -h analytics-db -U analytics_user -d analytics_db';
+        echo '';
+        tail -f /dev/null
+      "
+    profiles:
+      - sql-tools
+
   pgadmin:
     image: dpage/pgadmin4:latest
     depends_on:
