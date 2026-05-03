@@ -1,40 +1,111 @@
 # ACME Delivery Analytics Pipeline
 
-## Quick Start
+## Overview
+
+This project implements a Dockerized analytics pipeline using:
+- PostgreSQL source OLTP database with `pg_cron` synthetic data generation
+- Debezium CDC connector for change capture
+- Kafka and Kafka Connect for event streaming
+- Analytics warehouse PostgreSQL database with a star schema
+- FastAPI REST API for analytics queries
+- Optional monitoring and SQL tooling via Docker Compose profiles
+
+The repository is fully Dockerized so the application can be run with a single `docker compose` command.
+
+## Prerequisites
+
+- Docker Engine installed
+- Docker Compose plugin available
+- macOS or Linux environment
+
+## Run the application
+
+Start the full stack:
 
 ```bash
 docker compose up --build
 ```
 
-All services start in dependency order. Stop everything:
+Start detached:
+
+```bash
+docker compose up --build -d
+```
+
+Stop and remove containers:
 
 ```bash
 docker compose down
 ```
 
----
+## Services
 
-## Service URLs
-
-| Service | URL | Notes |
+| Service | URL / Port | Purpose |
 |---|---|---|
-| API | http://localhost:8000 | FastAPI analytics layer |
+| API | http://localhost:8000 | Analytics REST API |
 | API docs | http://localhost:8000/docs | Swagger UI |
-| Metabase | http://localhost:3000 | BI dashboards |
-| Kafka Connect | http://localhost:8083 | Debezium REST API |
-| Source DB | `localhost:5432` | PostgreSQL OLTP |
-| Analytics DB | `localhost:5433` | PostgreSQL star schema |
+| Metabase | http://localhost:3000 | BI dashboard |
+| Kafka Connect | http://localhost:8083 | Debezium connector REST API |
+| Source PostgreSQL | `localhost:5432` | OLTP operations database |
+| Analytics PostgreSQL | `localhost:5433` | Analytics warehouse |
 
-Optional services:
+Optional tools via profiles:
+| pgAdmin | http://localhost:5050 | PostgreSQL UI |
+| Kafka UI | http://localhost:8080 | Kafka cluster monitoring |
+
+## Docker Compose profiles
+
+Use the `sql-tools` profile for database tooling and validation:
 
 ```bash
-docker compose --profile monitoring up -d kafka-ui     # http://localhost:8080
-docker compose --profile sql-tools up -d pgadmin       # http://localhost:5050
+docker compose --profile sql-tools up -d pgadmin
 ```
 
----
+Run Great Expectations tests on the analytics warehouse:
 
-## Database Connections
+```bash
+docker compose --profile sql-tools run --rm great_expectations
+```
+
+Start Kafka UI monitoring:
+
+```bash
+docker compose --profile monitoring up -d kafka-ui
+```
+
+## API usage
+
+Health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Fetch open orders grouped by delivery date and status:
+
+```bash
+curl "http://localhost:8000/analytics/orders?status=open"
+```
+
+Fetch top delivery dates by open order count:
+
+```bash
+curl "http://localhost:8000/analytics/orders/top?limit=3&status=open"
+```
+
+Fetch pending items by product:
+
+```bash
+curl "http://localhost:8000/analytics/orders/product?status=open"
+```
+
+Fetch top customers by open order count:
+
+```bash
+curl "http://localhost:8000/analytics/orders/customers?limit=3&status=open"
+```
+
+## Database connection details
 
 ### Source DB (`finance_db`)
 
@@ -56,209 +127,77 @@ docker compose --profile sql-tools up -d pgadmin       # http://localhost:5050
 | User | `analytics_user` |
 | Password | `analytics_1234` |
 
-### psql
+### Local psql commands
 
 ```bash
-# Source DB
 psql -h localhost -p 5432 -U finance_db_user -d finance_db
-
-# Analytics DB
 psql -h localhost -p 5433 -U analytics_user -d analytics_db
 ```
 
-### pgAdmin (`http://localhost:5050`)
+## Optional UI tools
 
-Login: `admin@acme.com` / `admin123`
+### pgAdmin
 
-Add servers using the internal Docker hostnames:
+Open pgAdmin at `http://localhost:5050` and sign in with:
+
+- Email: `admin@acme.com`
+- Password: `admin123`
+
+Add database servers using internal Docker hostnames:
 
 | DB | Host | Port | User | Password |
 |---|---|---|---|---|
 | Source | `transactions-db` | `5432` | `finance_db_user` | `1234` |
 | Analytics | `analytics-db` | `5432` | `analytics_user` | `analytics_1234` |
 
-### Metabase (`http://localhost:3000`)
+### Metabase
 
-On first run add a PostgreSQL connection:
+Open Metabase at `http://localhost:3000` and add a PostgreSQL database with:
 
-| Field | Value |
-|---|---|
-| Host | `analytics-db` |
-| Port | `5432` |
-| Database | `analytics_db` |
-| Username | `analytics_user` |
-| Password | `analytics_1234` |
+- Host: `analytics-db`
+- Port: `5432`
+- Database: `analytics_db`
+- Username: `analytics_user`
+- Password: `analytics_1234`
 
----
+### Kafka UI
 
-## API Endpoints
-
-All endpoints accept `?status=` with values: `open` (default), `closed`, `PENDING`, `PROCESSING`, `REPROCESSING`, `COMPLETED`.
-
-| Method | Endpoint | Params | Description |
-|---|---|---|---|
-| GET | `/health` | — | Liveness probe |
-| GET | `/analytics/orders` | `?status=open` | Orders grouped by delivery date and status |
-| GET | `/analytics/orders/top` | `?limit=3&status=open` | Top N delivery dates by order count |
-| GET | `/analytics/orders/product` | `?status=open` | Pending items grouped by product |
-| GET | `/analytics/orders/customers` | `?limit=3&status=open` | Top N customers by order count |
-
----
-
-## Analytics SQL Queries
-
-Connect to `analytics_db` and run queries in the `analytics` schema.
-
-### Open orders by delivery date and status
-
-```sql
-SELECT
-    dd.full_date                AS delivery_date,
-    ds.status_code              AS status,
-    COUNT(1)                    AS order_count
-FROM analytics.fact_orders fo
-JOIN analytics.dim_order_status ds ON ds.status_sk = fo.status_sk
-JOIN analytics.dim_date         dd ON dd.date_sk   = fo.delivery_date_sk
-WHERE ds.is_open
-GROUP BY dd.full_date, ds.status_code
-ORDER BY dd.full_date, ds.status_code;
-```
-
-### Top 3 delivery dates with most open orders
-
-```sql
-SELECT
-    dd.full_date                AS delivery_date,
-    COUNT(1)                    AS order_count
-FROM analytics.fact_orders fo
-JOIN analytics.dim_order_status ds ON ds.status_sk = fo.status_sk
-JOIN analytics.dim_date         dd ON dd.date_sk   = fo.delivery_date_sk
-WHERE ds.is_open
-GROUP BY dd.full_date
-ORDER BY order_count DESC
-LIMIT 3;
-```
-
-### Pending items by product (open orders)
-
-```sql
-SELECT
-    dp.product_id,
-    dp.product_name,
-    COALESCE(SUM(foi.quantity), 0)  AS pending_quantity,
-    COUNT(1)                        AS item_count
-FROM analytics.fact_order_items foi
-JOIN analytics.dim_order_status ds ON ds.status_sk  = foi.status_sk
-JOIN analytics.dim_product      dp ON dp.product_sk = foi.product_sk
-WHERE ds.is_open
-  AND dp.is_current
-GROUP BY dp.product_id, dp.product_name
-ORDER BY pending_quantity DESC;
-```
-
-### Top 3 customers with most open orders
-
-```sql
-SELECT
-    dc.customer_id,
-    dc.customer_name,
-    COUNT(DISTINCT fo.order_id)     AS order_count
-FROM analytics.fact_orders fo
-JOIN analytics.dim_customer     dc ON dc.customer_sk = fo.customer_sk
-JOIN analytics.dim_order_status ds ON ds.status_sk   = fo.status_sk
-WHERE ds.is_open
-  AND dc.is_current
-GROUP BY dc.customer_id, dc.customer_name
-ORDER BY order_count DESC
-LIMIT 3;
-```
-
-### Row counts (pipeline health check)
-
-```sql
-SELECT
-    (SELECT COUNT(1) FROM analytics.fact_orders)      AS orders,
-    (SELECT COUNT(1) FROM analytics.fact_order_items) AS order_items,
-    (SELECT COUNT(1) FROM analytics.dim_customer)     AS customers,
-    (SELECT COUNT(1) FROM analytics.dim_product)      AS products;
-```
-
-### Product price history (SCD2)
-
-```sql
-SELECT product_id, product_name, unity_price, valid_from, valid_to, is_current
-FROM analytics.dim_product
-WHERE product_id = <id>
-ORDER BY valid_from;
-```
-
-### Backlog aging (open orders older than N days)
-
-```sql
-SELECT
-    fo.order_id,
-    dc.customer_name,
-    dd.full_date                            AS order_date,
-    ds.status_code,
-    CURRENT_DATE - dd.full_date             AS days_open
-FROM analytics.fact_orders fo
-JOIN analytics.dim_order_status ds ON ds.status_sk = fo.status_sk
-JOIN analytics.dim_date         dd ON dd.date_sk   = fo.order_date_sk
-JOIN analytics.dim_customer     dc ON dc.customer_sk = fo.customer_sk
-WHERE ds.is_open
-  AND dc.is_current
-  AND CURRENT_DATE - dd.full_date > 7
-ORDER BY days_open DESC;
-```
-
----
-
-## Monitoring Kafka & Debezium
-
-### Kafka UI (`http://localhost:8080`)
+Open Kafka UI at `http://localhost:8080` after starting the monitoring profile:
 
 ```bash
 docker compose --profile monitoring up -d kafka-ui
 ```
 
-Browse topics, connector status, consumer group lag visually.
+## Data quality validation
 
-### Debezium connector status
-
-```bash
-curl http://localhost:8083/connectors/finance-db-connector/status
-```
-
-### Kafka CLI
+Run the data quality checks against the analytics warehouse:
 
 ```bash
-# List topics
-docker exec deel-data-engineering-task-kafka-1 \
-  kafka-topics --list --bootstrap-server localhost:29092
-
-# Consume orders topic live
-docker exec -it deel-data-engineering-task-kafka-1 kafka-console-consumer \
-  --bootstrap-server localhost:29092 \
-  --topic finance_db.operations.orders \
-  --from-beginning
-
-# Consumer group lag
-docker exec deel-data-engineering-task-kafka-1 kafka-consumer-groups \
-  --describe --group analytics-consumer --bootstrap-server localhost:29092
+docker compose --profile sql-tools run --rm great_expectations
 ```
 
-### Ingestion logs
+## Troubleshooting
+
+If the API is not ready, check container logs:
 
 ```bash
-docker logs -f deel-data-engineering-task-ingestion-1
+docker compose logs -f api analytics-db ingestion kafka-connect
 ```
 
-### Debugging
+If Kafka Connect is not reachable:
 
 ```bash
-# No messages in Kafka?
-docker logs deel-data-engineering-task-kafka-connect-1
-
-# All service logs
-docker compose logs -f kafka kafka-connect ingestion
+curl http://localhost:8083/connectors
 ```
+
+If the analytics database has no tables, inspect the initialization script and container logs:
+
+```bash
+docker logs deel-data-engineering-task-analytics-db-1
+```
+
+## Notes
+
+- The pipeline is designed to load operational changes from the source database into the analytics warehouse using CDC.
+- The API exposes aggregated business metrics on open orders, delivery date ranking, product backlog, and top customers.
+- The repository is Docker-native, so minimal local setup is required beyond Docker and Docker Compose.
